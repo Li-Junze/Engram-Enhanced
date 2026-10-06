@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Engram</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -15,6 +15,7 @@
           <h1>Engram——记忆印迹</h1>
         </div>
         <div class="topbar-actions">
+          <button id="timerButton" class="ghost-button topbar-button timer-button" type="button" aria-label="学习计时" title="学习计时">⏱ 计时</button>
           <button id="statsButton" class="ghost-button topbar-button" type="button">统计</button>
           <button id="themeToggle" class="ghost-button topbar-button" type="button" aria-label="切换主题">切换主题</button>
           <button id="fullScreenButton" class="icon-button" type="button" aria-label="进入全屏" title="进入全屏">
@@ -32,6 +33,49 @@
           </button>
         </div>
       </header>
+
+      <section class="timer-panel is-hidden" id="timerPanel" aria-label="学习计时">
+        <div class="timer-display">
+          <strong id="timerClock">00:00</strong>
+          <span class="timer-state" id="timerStateLabel">未开始</span>
+        </div>
+        <div class="timer-modes" id="timerModes">
+          <button class="segment is-active" data-timer-mode="countdown" type="button">倒计时</button>
+          <button class="segment" data-timer-mode="alarm" type="button">到点闹钟</button>
+          <button class="segment" data-timer-mode="stopwatch" type="button">正计时</button>
+        </div>
+        <div class="timer-body">
+          <div class="timer-config" id="timerConfigCountdown">
+            <div class="timer-presets" id="timerPresets">
+              <button class="segment" data-minutes="5" type="button">5分</button>
+              <button class="segment" data-minutes="10" type="button">10分</button>
+              <button class="segment is-active" data-minutes="25" type="button">25分</button>
+              <button class="segment" data-minutes="45" type="button">45分</button>
+              <button class="segment" data-minutes="60" type="button">60分</button>
+            </div>
+            <div class="timer-custom">
+              <label for="timerCustomMinutes">自定义（分钟）</label>
+              <input id="timerCustomMinutes" type="number" min="1" max="600" value="25" inputmode="numeric">
+            </div>
+          </div>
+          <div class="timer-config is-hidden" id="timerConfigAlarm">
+            <div class="timer-custom">
+              <label for="timerAlarmTime">闹钟时间</label>
+              <input id="timerAlarmTime" type="time" value="22:30">
+            </div>
+            <p class="timer-hint">到达设定时刻响铃提醒；若时刻已过则按明天计算。</p>
+          </div>
+          <div class="timer-config is-hidden" id="timerConfigStopwatch">
+            <p class="timer-hint">记录本次学习的累计时长，可随时暂停/继续。</p>
+          </div>
+        </div>
+        <div class="timer-controls">
+          <button id="timerStartButton" class="primary-button" type="button">开始</button>
+          <button id="timerResetButton" class="ghost-button" type="button">重置</button>
+          <button id="timerDismissButton" class="ghost-button is-hidden" type="button">停止提醒</button>
+        </div>
+      </section>
+
 
       <section class="stats-grid">
         <article class="stat-card">
@@ -97,6 +141,7 @@
         </section>
 
         <section class="review-actions" id="reviewActions">
+          <button class="review-button speak-toggle" id="mobileSpeakButton" type="button" aria-label="朗读单词">🔊</button>
           <button class="review-button danger" data-action="unknown" type="button">不认识</button>
           <button class="review-button warn" data-action="vague" type="button">模糊</button>
           <button class="review-button success" data-action="known" type="button">认识</button>
@@ -328,6 +373,7 @@
     </section>
   </div>
 
+  <script src="web-api.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

@@ -1,8 +1,20 @@
-# Engram
+# Engram-Enhanced
 
 [中文说明](README.zh-CN.md)
 
+> **Attribution / 来源声明**：This project is an enhanced fork of [BaiYingNing/Engram](https://github.com/BaiYingNing/Engram) (v1.2.0, MIT License). All credit for the original Engram goes to [@BaiYingNing (Byinne)](https://github.com/BaiYingNing); the vocabulary data originates from [KyleBing/english-vocabulary](https://github.com/KyleBing/english-vocabulary) as used by the upstream project. This fork remains open source under the same MIT license.
+
 Engram is a desktop vocabulary trainer built for focused, high-volume English word study. It uses a lightweight Electron architecture, stores progress locally with SQLite, and combines batch-based study with spaced review scheduling.
+
+## Enhancements over upstream
+
+- **Web version**: browser adapter (`static/web-api.js`) backed by IndexedDB + lazy-loaded static word books, deployable to Cloudflare Pages with one command (`deploy-web.cmd`)
+- **Mobile-adaptive layout**: phone-sized screens get a thumb-friendly UI (fixed bottom scoring bar, always-available speak button, swipeable stats strip)
+- **Study timer**: countdown / alarm-at-clock-time / stopwatch modes with local beeps, desktop notifications, and title flashing
+- **Enforced single-audio-voice**: a token mechanism guarantees only one sound at any moment; switching words cuts the previous pronunciation immediately
+- **Fix: stuck batch progression**: batch completion now trusts the answered counter, so a lost `reviewed` flag can no longer permanently disable the "next" button (existing broken sessions self-heal)
+- **Stability**: SQLite `busy_timeout` and a single-instance lock prevent double-launch write contention
+- **Cross-compatible data**: web word IDs match the desktop database exactly, so desktop backups import cleanly into the web version
 
 ## Project Overview
 

@@ -6,8 +6,25 @@ const { createStore } = require("./store");
 
 app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
+// 双开会争抢同一个 SQLite 写锁，导致打分写入失败、单词无法推进；
+// 第二次启动时只把已有窗口调到前台。
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
 let mainWindow = null;
 let store = null;
+
+function focusExistingWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
 
 function resolveWindowStatePath() {
   return path.join(app.getPath("userData"), "window-state.json");
@@ -236,6 +253,8 @@ function createMainWindow() {
     mainWindow.setFullScreen(true);
   }
 }
+
+app.on("second-instance", focusExistingWindow);
 
 app.whenReady().then(() => {
   store = createStore({

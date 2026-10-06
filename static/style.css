@@ -1330,3 +1330,396 @@ code {
     overflow-x: auto;
   }
 }
+
+/* 朗读按钮：仅手机端固定底栏中显示，桌面端隐藏 */
+.review-actions .speak-toggle {
+  display: none;
+}
+
+/* ============================================================
+   手机端自适应层（≤720px 视口；桌面端与平板横屏布局不受影响）
+   ============================================================ */
+@media (max-width: 720px) {
+  .app-shell {
+    height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .page-frame {
+    width: min(100vw - 16px, 1280px);
+    padding-top: 10px;
+    /* 给固定的底部评分栏留出空间 */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .topbar h1 {
+    font-size: clamp(20px, 6vw, 28px);
+  }
+
+  .topbar-actions {
+    gap: 8px;
+  }
+
+  .topbar-button {
+    width: auto;
+    min-height: 38px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  .icon-button {
+    width: 38px;
+    min-width: 38px;
+  }
+
+  /* 统计信息压缩成一行细条，可横滑，不占纵向空间 */
+  .stats-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: auto;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .stats-grid::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  .stat-card {
+    padding: 7px 12px;
+    border-radius: 12px;
+    white-space: nowrap;
+    display: flex;
+    align-items: baseline;
+  }
+
+  .stat-card span {
+    display: inline;
+    font-size: 11px;
+    margin: 0 6px 0 0;
+  }
+
+  .stat-card strong {
+    font-size: 15px;
+  }
+
+  .stat-card small {
+    display: none;
+  }
+
+  .workspace {
+    gap: 10px;
+  }
+
+  /* 单词卡：改为随页面滚动，不再内部滚动 */
+  .word-card {
+    height: auto;
+    min-height: 0;
+    padding: 16px 16px 18px;
+    border-radius: 22px;
+    gap: 12px;
+  }
+
+  .answer-scroll {
+    overflow: visible;
+    padding: 0 2px;
+  }
+
+  .answer-placeholder {
+    min-height: 180px;
+    font-size: 14px;
+  }
+
+  #wordText {
+    font-size: clamp(30px, 9.5vw, 48px);
+  }
+
+  .phonetic-line {
+    font-size: 15px;
+    gap: 10px;
+  }
+
+  /* 上一个 / 显示答案 / 下一个：单行等宽 */
+  .nav-strip {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav-strip .ghost-button,
+  .nav-strip .primary-button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 6px;
+    min-height: 46px;
+    font-size: 14px;
+  }
+
+  .nav-strip .primary-button {
+    flex: 1.3 1 0;
+  }
+
+  /* 评分栏固定在屏幕底部，展开释义后也始终可见可按 */
+  .review-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    border-radius: 0;
+    background: var(--bg-panel-strong);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 -10px 26px rgba(3, 9, 16, 0.35);
+  }
+
+  .review-button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 52px;
+    font-size: 16px;
+    padding: 0 4px;
+  }
+
+  /* 常驻朗读按钮 */
+  .review-actions .speak-toggle {
+    display: inline-flex;
+    flex: 0 0 58px;
+    align-items: center;
+    justify-content: center;
+    min-height: 52px;
+    font-size: 20px;
+    padding: 0;
+  }
+
+  /* 批次切换卡 */
+  .transition-card {
+    min-height: min(440px, 58dvh);
+    padding: 22px 16px;
+    border-radius: 22px;
+  }
+
+  .transition-card h2 {
+    font-size: clamp(26px, 8vw, 40px);
+  }
+
+  .transition-card p {
+    font-size: 14px;
+  }
+
+  .transition-actions {
+    flex-wrap: nowrap;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .transition-actions .ghost-button,
+  .transition-actions .primary-button {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* 统计 / 设置弹层：全屏面板 */
+  .overlay {
+    place-items: stretch;
+  }
+
+  .modal-panel {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding: 14px 14px 20px;
+  }
+
+  .modal-header h2,
+  .section-header h3 {
+    font-size: 20px;
+  }
+
+  .stats-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .calendar-cell {
+    min-height: 54px;
+    padding: 6px;
+  }
+
+  /* 避免 iOS 聚焦输入框时自动放大 */
+  .settings-grid input,
+  .settings-grid select,
+  .settings-scroll input,
+  .settings-scroll select {
+    font-size: 16px;
+  }
+
+  /* 计时面板：固定在顶部，全宽 */
+  .timer-panel {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    width: auto;
+    z-index: 45;
+  }
+
+  .timer-custom input {
+    font-size: 16px;
+  }
+}
+
+/* 触屏设备上隐藏键盘快捷键提示 */
+@media (max-width: 720px), (pointer: coarse) {
+  .tips-panel {
+    display: none;
+  }
+}
+
+/* ============================================================
+   学习计时器（倒计时 / 到点闹钟 / 正计时）
+   ============================================================ */
+.page-frame {
+  position: relative;
+}
+
+.timer-button.is-timing {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.timer-button.is-alarming {
+  color: var(--danger);
+  border-color: var(--danger);
+  animation: timer-alarm-pulse 1s ease-in-out infinite;
+}
+
+@keyframes timer-alarm-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.timer-panel {
+  position: absolute;
+  top: 58px;
+  right: 0;
+  z-index: 40;
+  width: min(360px, calc(100vw - 32px));
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-panel-strong), var(--bg-panel));
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.timer-panel.is-alarming {
+  border-color: var(--danger);
+}
+
+.timer-display {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timer-display strong {
+  font-size: 34px;
+  line-height: 1;
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.02em;
+}
+
+.timer-state {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.timer-modes {
+  display: flex;
+  gap: 6px;
+}
+
+.timer-modes .segment {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.timer-config {
+  display: grid;
+  gap: 10px;
+}
+
+.timer-presets {
+  display: flex;
+  gap: 6px;
+}
+
+.timer-presets .segment {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+.timer-custom {
+  display: grid;
+  gap: 6px;
+}
+
+.timer-custom label {
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.timer-custom input {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-main);
+  font-size: 15px;
+}
+
+.timer-hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.timer-controls .primary-button {
+  flex: 1.4 1 0;
+  min-width: 0;
+}
+
+.timer-controls .ghost-button {
+  flex: 1 1 0;
+  min-width: 0;
+}

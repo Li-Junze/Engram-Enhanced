@@ -906,6 +906,7 @@ function createStore({ dbPath, dataDir }) {
   const booksByKey = new Map(books.map((book) => [book.key, book]));
   let db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL;");
+  db.exec("PRAGMA busy_timeout = 5000;");
 
   const migratedVersion = migrateDatabase(db, booksByKey);
   if (migratedVersion < SCHEMA_VERSION) {
@@ -915,6 +916,7 @@ function createStore({ dbPath, dataDir }) {
     db.close();
     db = new DatabaseSync(dbPath);
     db.exec("PRAGMA journal_mode = WAL;");
+    db.exec("PRAGMA busy_timeout = 5000;");
   }
 
   ensureRuntimeSchema(db);
@@ -927,6 +929,7 @@ function createStore({ dbPath, dataDir }) {
       buildDatabase({ dbPath, dataDir });
       db = new DatabaseSync(dbPath);
       db.exec("PRAGMA journal_mode = WAL;");
+      db.exec("PRAGMA busy_timeout = 5000;");
       ensureRuntimeSchema(db);
       setSchemaVersion(db, SCHEMA_VERSION);
       ensureBooksImported(db, books);

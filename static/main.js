@@ -51,6 +51,8 @@ const state = {
   silentKeepAliveGainNode: null,
   silentKeepAlivePromise: null,
   currentAudio: null,
+  audioWordId: null,
+  audioToken: 0,
   hasPlayedInitialAutoplay: false,
   autoplayTimer: null,
   lastForegroundAt: 0,
@@ -143,7 +145,21 @@ const els = {
   dayStartSelectLabel: document.getElementById("dayStartSelectLabel"),
   dayStartSelectMenu: document.getElementById("dayStartSelectMenu"),
   silentKeepAliveToggle: document.getElementById("silentKeepAliveToggle"),
-  enhancedSilentKeepAliveToggle: document.getElementById("enhancedSilentKeepAliveToggle")
+  enhancedSilentKeepAliveToggle: document.getElementById("enhancedSilentKeepAliveToggle"),
+  timerButton: document.getElementById("timerButton"),
+  timerPanel: document.getElementById("timerPanel"),
+  timerClock: document.getElementById("timerClock"),
+  timerStateLabel: document.getElementById("timerStateLabel"),
+  timerModes: document.getElementById("timerModes"),
+  timerConfigCountdown: document.getElementById("timerConfigCountdown"),
+  timerConfigAlarm: document.getElementById("timerConfigAlarm"),
+  timerConfigStopwatch: document.getElementById("timerConfigStopwatch"),
+  timerPresets: document.getElementById("timerPresets"),
+  timerCustomMinutes: document.getElementById("timerCustomMinutes"),
+  timerAlarmTime: document.getElementById("timerAlarmTime"),
+  timerStartButton: document.getElementById("timerStartButton"),
+  timerResetButton: document.getElementById("timerResetButton"),
+  timerDismissButton: document.getElementById("timerDismissButton")
 };
 
 const actionText = {
@@ -257,7 +273,13 @@ function isLastTask() {
 }
 
 function allTasksReviewed() {
-  return state.tasks.length > 0 && state.tasks.every((item) => item.reviewed);
+  if (!state.tasks.length) {
+    return false;
+  }
+  // answeredCount 是权威进度；持久化的会话可能丢失单个任务的 reviewed 标志，
+  // 只依赖标志会让“下一词”在最后一张卡上永久禁用。
+  return state.answeredCount >= state.tasks.length
+    || state.tasks.every((item) => item.reviewed);
 }
 
 function hydrateTasks(items) {
@@ -397,10 +419,20 @@ function restoreSavedSession() {
     state.viewMode = "study";
     state.tasks = hydrateRestoredTasks(saved.tasks);
     state.index = Math.min(Math.max(Number(saved.index) || 0, 0), state.tasks.length - 1);
+    const reviewedCount = state.tasks.filter((item) => item.reviewed).length;
     state.answeredCount = Math.min(
-      Math.max(Number(saved.answeredCount) || 0, 0),
+      Math.max(Number(saved.answeredCount) || 0, reviewedCount),
       state.tasks.length
     );
+
+    if (state.answeredCount >= state.tasks.length) {
+      clearSavedSession();
+      state.viewMode = "idle-next-batch";
+      state.tasks = [];
+      state.index = 0;
+      state.answeredCount = 0;
+    }
+
     return true;
   } catch (error) {
     console.error(error);
@@ -1116,14 +1148,42 @@ function resolveSpeechAudioUrl(speech) {
   return `https://dict.youdao.com/dictvoice?audio=${raw}`;
 }
 
-async function playAudioUrl(audioUrl, { onStart, onEnd } = {}) {
+// 强制单一声音：令牌递增使所有还在加载中的旧播放链全部失效
+function stopAllAudio() {
+  state.audioToken = (state.audioToken || 0) + 1;
+  clearAutoplayTimer();
+  if (state.currentAudio) {
+    state.currentAudio.pause();
+    state.currentAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
+  }
+  updateSpeakButton("播放", "uk");
+  updateSpeakButton("播放", "us");
+}
+
+function isAudioCurrent(token) {
+  return token != null && token === state.audioToken;
+}
+
+async function playAudioUrl(audioUrl, { onStart, onEnd } = {}, token = null) {
   if (!audioUrl) {
     return false;
+  }
+
+  if (token == null) {
+    // 独立播放（如例句发音）：使所有待定的旧播放链失效
+    stopAllAudio();
+    token = state.audioToken;
   }
 
   if (state.currentAudio) {
     state.currentAudio.pause();
     state.currentAudio = null;
+  }
+  if ("speechSynthesis" in window) {
+    window.speechSynthesis.cancel();
   }
 
   const audio = new Audio(audioUrl);
@@ -1146,6 +1206,10 @@ async function playAudioUrl(audioUrl, { onStart, onEnd } = {}) {
         window.clearTimeout(timeoutId);
         audio.onended = null;
         audio.onerror = null;
+        // 未正常播完（超时/出错/被新播放取代）都要停下来，避免稍后突然出声
+        if (!ok) {
+          audio.pause();
+        }
         if (state.currentAudio === audio) {
           state.currentAudio = null;
         }
@@ -1168,28 +1232,43 @@ async function playAudioUrl(audioUrl, { onStart, onEnd } = {}) {
   }
 }
 
-async function playDictionaryAudio(item, accent = state.accent) {
+async function playDictionaryAudio(item, accent = state.accent, token = null) {
   const audioUrl = resolveDictionaryAudioUrl(item, accent);
   const played = await playAudioUrl(audioUrl, {
-    onStart: () => updateSpeakButton("播放中...", accent),
-    onEnd: () => updateSpeakButton("播放", accent)
-  });
+    onStart: () => {
+      if (isAudioCurrent(token)) {
+        updateSpeakButton("播放中...", accent);
+      }
+    },
+    onEnd: () => {
+      if (isAudioCurrent(token)) {
+        updateSpeakButton("播放", accent);
+      }
+    }
+  }, token);
 
   if (!played) {
-    updateSpeakButton("使用系统发音", accent);
-    await wait(180);
+    if (isAudioCurrent(token)) {
+      updateSpeakButton("使用系统发音", accent);
+      await wait(180);
+    }
   }
 
   return played;
 }
 
-async function speakWithTts(item, accent = state.accent) {
+async function speakWithTts(item, accent = state.accent, token = null) {
   if (!item || !("speechSynthesis" in window)) {
     return;
   }
 
   await waitForSpeechReady();
   await ensureVoicesLoaded();
+
+  // 强制校验：等待期间若出现更新的播放，此链即刻作废
+  if (!isAudioCurrent(token)) {
+    return;
+  }
 
   const synth = window.speechSynthesis;
   const utterance = new SpeechSynthesisUtterance(item.word);
@@ -1204,9 +1283,24 @@ async function speakWithTts(item, accent = state.accent) {
   utterance.rate = 0.92;
   utterance.pitch = 1;
   utterance.volume = 1;
-  utterance.onstart = () => updateSpeakButton("播放中...", accent);
-  utterance.onend = () => updateSpeakButton("播放", accent);
-  utterance.onerror = () => updateSpeakButton("重试发音", accent);
+  utterance.onstart = () => {
+    // 出声前的最后一道校验：令牌过期立即掐断
+    if (!isAudioCurrent(token)) {
+      synth.cancel();
+      return;
+    }
+    updateSpeakButton("播放中...", accent);
+  };
+  utterance.onend = () => {
+    if (isAudioCurrent(token)) {
+      updateSpeakButton("播放", accent);
+    }
+  };
+  utterance.onerror = () => {
+    if (isAudioCurrent(token)) {
+      updateSpeakButton("重试发音", accent);
+    }
+  };
 
   if (synth.paused) {
     synth.resume();
@@ -1216,6 +1310,11 @@ async function speakWithTts(item, accent = state.accent) {
   if (synth.speaking || synth.pending) {
     synth.cancel();
     await wait(90);
+  }
+
+  // 强制校验：真正出声前再验一次令牌
+  if (!isAudioCurrent(token)) {
+    return;
   }
 
   synth.speak(utterance);
@@ -1231,12 +1330,22 @@ async function speakCurrentWord(accent = state.accent) {
     await syncSilentKeepAlive();
   }
 
-  const usedDictionaryAudio = await playDictionaryAudio(item, accent);
+  // 单一声音：开始新播放前截断一切旧声音，并取得本次专属令牌
+  stopAllAudio();
+  const token = state.audioToken;
+  state.audioWordId = item.id;
+
+  const usedDictionaryAudio = await playDictionaryAudio(item, accent, token);
   if (usedDictionaryAudio) {
     return;
   }
 
-  await speakWithTts(item, accent);
+  // 强制校验：词典音频失败后，只有仍是最新链才允许 TTS 兜底
+  if (!isAudioCurrent(token)) {
+    return;
+  }
+
+  await speakWithTts(item, accent, token);
 }
 
 function scheduleAutoplay() {
@@ -1515,6 +1624,12 @@ function renderCurrentWord() {
   if (!item) {
     renderEmpty();
     return;
+  }
+
+  // 单词已切换：自动截断上一个单词的声音
+  if (state.audioWordId != null && state.audioWordId !== item.id) {
+    stopAllAudio();
+    state.audioWordId = null;
   }
 
   els.wordText.textContent = item.word;
@@ -2040,6 +2155,10 @@ function bindEvents() {
     });
   });
 
+  document.getElementById("mobileSpeakButton")?.addEventListener("click", () => {
+    speakCurrentWord().catch(console.error);
+  });
+
   els.statsCategorySwitch.addEventListener("click", (event) => {
     const button = event.target.closest("[data-category]");
     if (!button) {
@@ -2234,10 +2353,434 @@ function bindEvents() {
     });
   }
 
+  els.timerButton?.addEventListener("click", () => {
+    els.timerPanel.classList.toggle("is-hidden");
+    updateTimerDisplay();
+  });
+
+  els.timerModes?.querySelectorAll("[data-timer-mode]").forEach((button) => {
+    button.addEventListener("click", () => setTimerMode(button.dataset.timerMode));
+  });
+
+  els.timerPresets?.querySelectorAll("[data-minutes]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.timer.selectedMinutes = Number(button.dataset.minutes) || 25;
+      state.timer.remainMs = 0;
+      syncTimerInputs();
+      persistTimerState();
+      updateTimerDisplay();
+    });
+  });
+
+  els.timerCustomMinutes?.addEventListener("change", () => {
+    const value = Math.min(Math.max(Math.round(Number(els.timerCustomMinutes.value) || 0), 1), 600);
+    state.timer.selectedMinutes = value || 25;
+    state.timer.remainMs = 0;
+    syncTimerInputs();
+    persistTimerState();
+    updateTimerDisplay();
+  });
+
+  els.timerAlarmTime?.addEventListener("change", () => {
+    state.timer.alarmTime = els.timerAlarmTime.value || "22:30";
+    persistTimerState();
+  });
+
+  els.timerStartButton?.addEventListener("click", startOrPauseTimer);
+  els.timerResetButton?.addEventListener("click", resetTimer);
+  els.timerDismissButton?.addEventListener("click", dismissTimerAlarm);
+
+  document.addEventListener("click", (event) => {
+    if (!els.timerPanel || els.timerPanel.classList.contains("is-hidden")) {
+      return;
+    }
+    if (event.target.closest("#timerPanel") || event.target.closest("#timerButton")) {
+      return;
+    }
+    els.timerPanel.classList.add("is-hidden");
+  });
+
   window.addEventListener("beforeunload", () => {
     persistSession();
+    persistTimerState();
     stopSilentKeepAlive({ close: true }).catch(console.error);
   });
+}
+
+// ============================================================
+// 学习计时器：倒计时 / 到点闹钟 / 正计时
+// ============================================================
+const TIMER_STORAGE_KEY = "engram-timer";
+const TIMER_GRACE_MS = 120000;
+
+const timerRuntime = {
+  ticker: null,
+  alarmRepeat: null,
+  titleFlash: null,
+  persistCounter: 0,
+  baseTitle: document.title
+};
+
+state.timer = {
+  mode: "countdown",
+  running: false,
+  finished: false,
+  endAt: null,
+  remainMs: 0,
+  elapsedMs: 0,
+  lastTickAt: null,
+  selectedMinutes: 25,
+  alarmTime: "22:30"
+};
+
+function persistTimerState() {
+  const t = state.timer;
+  localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify({
+    mode: t.mode,
+    running: t.running,
+    endAt: t.endAt,
+    remainMs: t.remainMs,
+    elapsedMs: t.elapsedMs,
+    lastTickAt: t.lastTickAt,
+    selectedMinutes: t.selectedMinutes,
+    alarmTime: t.alarmTime
+  }));
+}
+
+function loadTimerState() {
+  try {
+    const raw = localStorage.getItem(TIMER_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const saved = JSON.parse(raw);
+    const t = state.timer;
+    t.mode = ["countdown", "alarm", "stopwatch"].includes(saved.mode) ? saved.mode : "countdown";
+    t.selectedMinutes = Math.min(Math.max(Number(saved.selectedMinutes) || 25, 1), 600);
+    t.alarmTime = /^\d{1,2}:\d{2}$/.test(String(saved.alarmTime || "")) ? saved.alarmTime : "22:30";
+    t.elapsedMs = Number(saved.elapsedMs) || 0;
+    t.remainMs = Number(saved.remainMs) || 0;
+
+    if (saved.running && saved.endAt && Number(saved.endAt) > Date.now()) {
+      t.running = true;
+      t.endAt = Number(saved.endAt);
+      t.lastTickAt = Date.now();
+    } else if (saved.running && saved.endAt && saved.mode !== "stopwatch"
+      && Date.now() - Number(saved.endAt) < TIMER_GRACE_MS) {
+      // 离开应用期间到点：恢复时补一次提醒
+      t.finished = true;
+      t.endAt = Number(saved.endAt);
+    } else {
+      t.running = false;
+      if (t.mode === "countdown" && !t.remainMs) {
+        t.remainMs = 0;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function formatTimerClock(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+function defaultTimerDurationMs() {
+  return (Number(state.timer.selectedMinutes) || 25) * 60 * 1000;
+}
+
+function updateTimerDisplay() {
+  const t = state.timer;
+  let displayMs = 0;
+  let stateLabel;
+
+  if (t.finished) {
+    stateLabel = "时间到";
+  } else if (t.running) {
+    if (t.mode === "stopwatch") {
+      displayMs = t.elapsedMs + (t.lastTickAt ? Date.now() - t.lastTickAt : 0);
+      stateLabel = "正计时中";
+    } else {
+      displayMs = Math.max(0, (t.endAt || Date.now()) - Date.now());
+      stateLabel = t.mode === "alarm" ? "闹钟待响" : "倒计时中";
+    }
+  } else if (t.mode === "stopwatch") {
+    displayMs = t.elapsedMs;
+    stateLabel = t.elapsedMs > 0 ? "已暂停" : "未开始";
+  } else {
+    displayMs = t.remainMs > 0 ? t.remainMs : defaultTimerDurationMs();
+    stateLabel = t.remainMs > 0 ? "已暂停" : "未开始";
+  }
+
+  const clockText = formatTimerClock(displayMs);
+  els.timerClock.textContent = clockText;
+  els.timerStateLabel.textContent = stateLabel;
+
+  if (t.finished) {
+    els.timerButton.textContent = "⏰ 时间到";
+  } else if (t.running) {
+    els.timerButton.textContent = `⏱ ${clockText}`;
+  } else {
+    els.timerButton.textContent = "⏱ 计时";
+  }
+  els.timerButton.classList.toggle("is-timing", t.running);
+  els.timerButton.classList.toggle("is-alarming", t.finished);
+  els.timerPanel.classList.toggle("is-alarming", t.finished);
+
+  els.timerStartButton.textContent = t.running
+    ? "暂停"
+    : (t.finished ? "重新开始" : (t.remainMs > 0 || t.elapsedMs > 0 ? "继续" : "开始"));
+  els.timerDismissButton.classList.toggle("is-hidden", !t.finished);
+}
+
+function computeAlarmTarget(timeText) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(timeText || "").trim());
+  if (!match) {
+    return null;
+  }
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) {
+    return null;
+  }
+  const target = new Date();
+  target.setHours(hours, minutes, 0, 0);
+  if (target.getTime() <= Date.now()) {
+    target.setDate(target.getDate() + 1);
+  }
+  return target.getTime();
+}
+
+function startOrPauseTimer() {
+  const t = state.timer;
+  if (t.running) {
+    if (t.mode === "stopwatch") {
+      if (t.lastTickAt) {
+        t.elapsedMs += Date.now() - t.lastTickAt;
+        t.lastTickAt = null;
+      }
+    } else {
+      t.remainMs = Math.max(0, (t.endAt || Date.now()) - Date.now());
+      t.endAt = null;
+    }
+    t.running = false;
+  } else {
+    if (t.mode === "stopwatch") {
+      t.finished = false;
+      t.lastTickAt = Date.now();
+      t.running = true;
+    } else if (t.mode === "alarm") {
+      const target = computeAlarmTarget(t.alarmTime);
+      if (!target) {
+        return;
+      }
+      t.endAt = target;
+      t.remainMs = 0;
+      t.finished = false;
+      t.running = true;
+    } else {
+      const durationMs = t.remainMs > 0 ? t.remainMs : defaultTimerDurationMs();
+      if (durationMs <= 0) {
+        return;
+      }
+      t.endAt = Date.now() + durationMs;
+      t.remainMs = 0;
+      t.finished = false;
+      t.running = true;
+    }
+    stopTimerAlarmAttention();
+    requestTimerNotificationPermission();
+  }
+  persistTimerState();
+  updateTimerDisplay();
+}
+
+function resetTimer() {
+  const t = state.timer;
+  t.running = false;
+  t.finished = false;
+  t.endAt = null;
+  t.remainMs = 0;
+  t.elapsedMs = 0;
+  t.lastTickAt = null;
+  stopTimerAlarmAttention();
+  persistTimerState();
+  updateTimerDisplay();
+}
+
+function dismissTimerAlarm() {
+  const t = state.timer;
+  t.finished = false;
+  t.endAt = null;
+  t.remainMs = 0;
+  stopTimerAlarmAttention();
+  persistTimerState();
+  updateTimerDisplay();
+}
+
+function setTimerMode(mode) {
+  const t = state.timer;
+  if (t.mode === mode) {
+    return;
+  }
+  t.mode = mode;
+  t.running = false;
+  t.finished = false;
+  t.endAt = null;
+  t.remainMs = 0;
+  t.elapsedMs = 0;
+  t.lastTickAt = null;
+  stopTimerAlarmAttention();
+  renderTimerMode();
+  persistTimerState();
+  updateTimerDisplay();
+}
+
+function renderTimerMode() {
+  const t = state.timer;
+  els.timerModes.querySelectorAll("[data-timer-mode]").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.timerMode === t.mode);
+  });
+  els.timerConfigCountdown.classList.toggle("is-hidden", t.mode !== "countdown");
+  els.timerConfigAlarm.classList.toggle("is-hidden", t.mode !== "alarm");
+  els.timerConfigStopwatch.classList.toggle("is-hidden", t.mode !== "stopwatch");
+}
+
+function syncTimerInputs() {
+  const minutes = state.timer.selectedMinutes;
+  els.timerCustomMinutes.value = String(minutes);
+  els.timerPresets.querySelectorAll(".segment").forEach((button) => {
+    button.classList.toggle("is-active", Number(button.dataset.minutes) === minutes);
+  });
+  els.timerAlarmTime.value = state.timer.alarmTime;
+}
+
+function playTimerBeeps() {
+  try {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      return;
+    }
+    timerRuntime.beepCtx = timerRuntime.beepCtx || new AudioContextCtor();
+    const ctx = timerRuntime.beepCtx;
+    if (ctx.state === "suspended") {
+      ctx.resume();
+    }
+    const startAt = ctx.currentTime + 0.05;
+    [0, 0.35, 0.7].forEach((offset) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, startAt + offset);
+      gain.gain.exponentialRampToValueAtTime(0.35, startAt + offset + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + offset + 0.28);
+      oscillator.connect(gain).connect(ctx.destination);
+      oscillator.start(startAt + offset);
+      oscillator.stop(startAt + offset + 0.3);
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function showTimerNotification() {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") {
+      return;
+    }
+    new Notification("Engram 计时", {
+      body: state.timer.mode === "alarm" ? "闹钟时间到！" : "倒计时结束，休息一下吧"
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function requestTimerNotificationPermission() {
+  try {
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function startTimerAlarmAttention() {
+  playTimerBeeps();
+  timerRuntime.alarmRepeat = window.setInterval(playTimerBeeps, 2500);
+  timerRuntime.titleFlash = window.setInterval(() => {
+    document.title = document.title === "⏰ 时间到" ? timerRuntime.baseTitle : "⏰ 时间到";
+  }, 900);
+  document.title = "⏰ 时间到";
+  showTimerNotification();
+  requestTimerNotificationPermission();
+}
+
+function stopTimerAlarmAttention() {
+  if (timerRuntime.alarmRepeat) {
+    window.clearInterval(timerRuntime.alarmRepeat);
+    timerRuntime.alarmRepeat = null;
+  }
+  if (timerRuntime.titleFlash) {
+    window.clearInterval(timerRuntime.titleFlash);
+    timerRuntime.titleFlash = null;
+  }
+  document.title = timerRuntime.baseTitle;
+}
+
+function fireTimerAlarm() {
+  const t = state.timer;
+  t.running = false;
+  t.finished = true;
+  persistTimerState();
+  startTimerAlarmAttention();
+  updateTimerDisplay();
+}
+
+function startTimerTicker() {
+  if (timerRuntime.ticker) {
+    return;
+  }
+  timerRuntime.ticker = window.setInterval(() => {
+    const t = state.timer;
+    if (t.running) {
+      if (t.mode === "stopwatch") {
+        if (t.lastTickAt) {
+          const now = Date.now();
+          t.elapsedMs += now - t.lastTickAt;
+          t.lastTickAt = now;
+        }
+      } else if (t.endAt && Date.now() >= t.endAt) {
+        fireTimerAlarm();
+      }
+      if (t.running) {
+        timerRuntime.persistCounter += 1;
+        if (timerRuntime.persistCounter % 20 === 0) {
+          persistTimerState();
+        }
+      }
+    }
+    updateTimerDisplay();
+  }, 500);
+}
+
+function initTimer() {
+  loadTimerState();
+  renderTimerMode();
+  syncTimerInputs();
+  updateTimerDisplay();
+  startTimerTicker();
+  if (state.timer.finished) {
+    startTimerAlarmAttention();
+  }
 }
 
 async function init() {
@@ -2254,6 +2797,7 @@ async function init() {
   applyTheme(savedTheme === "light" ? "light" : "dark");
   renderDayStartOptions();
   applyDailyPlan(state.dailyPlan);
+  initTimer();
   await applyBatchSize(state.batchSize, { resetSession: false });
   renderAccentState();
   renderFullScreenButton();

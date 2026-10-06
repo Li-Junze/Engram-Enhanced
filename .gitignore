@@ -35,3 +35,8 @@ private/
 # Keep source data in repo
 !data/
 !data/**/*.json
+
+# Web build output & local tooling
+web-dist/
+.build-shim/
+.ssh-tools/
